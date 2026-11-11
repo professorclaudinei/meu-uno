@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meu UNO Online</title>
+    <!-- Link mais estável da biblioteca PeerJS -->
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body {
+            background-color: #1b5e20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            height: 100vh;
+            margin: 0;
+            padding: 15px;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+
+        .painel-online {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 10px 15px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .painel-online input {
+            padding: 6px;
+            border-radius: 5px;
+            border: none;
+            width: 110px;
+            text-transform: uppercase;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .painel-online button {
+            padding: 6px 12px;
+            border-radius: 5px;
+            border: none;
+            background: #fdd835;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .centro-mesa {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .mao-jogador {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .carta {
+            width: 75px;
+            height: 115px;
+            border: 5px solid white;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 38px;
+            font-weight: bold;
+            box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+            cursor: pointer;
+            transition: transform 0.2s;
+            user-select: none;
+        }
+
+        .mao-jogador .carta:hover {
+            transform: translateY(-15px);
+        }
+
+        .monte-compra {
+            background-color: #212121;
+            font-size: 18px;
+        }
+
+        .vermelho { background-color: #e53935; }
+        .azul     { background-color: #1e88e5; }
+        .verde    { background-color: #43a047; }
+        .amarelo  { background-color: #fdd835; color: #333; }
+    </style>
+</head>
+<body>
+
+    <div class="painel-online">
+        <div>Seu Código da Sala: <strong id="meu-codigo" style="color: #fdd835; font-size: 18px;">Conectando...</strong></div>
+        <div style="margin-top: 8px;">
+            <input type="text" id="codigo-amigo" placeholder="Código do amigo">
+            <button onclick="conectarAmigo()">Entrar</button>
+        </div>
+        <div id="status-conexao" style="margin-top: 5px; color: #a5d6a7;">Aguardando servidor...</div>
+    </div>
+
+    <h3 id="mensagem" style="margin: 5px 0; text-align: center;">Jogue uma carta!</h3>
+
+    <div class="centro-mesa">
+        <div>
+            <p style="text-align: center; margin: 0 0 5px 0;">Comprar</p>
+            <div class="carta monte-compra" onclick="comprarCarta()">UNO</div>
+        </div>
+        <div>
+            <p style="text-align: center; margin: 0 0 5px 0;">Mesa</p>
+            <div class="carta" id="carta-mesa"></div>
+        </div>
+    </div>
+
+    <div>
+        <p style="text-align: center; margin: 0 0 8px 0;">Suas Cartas:</p>
+        <div class="mao-jogador" id="minha-mao"></div>
+    </div>
+
+    <script>
+        const cores = ['vermelho', 'azul', 'verde', 'amarelo'];
+        const valores = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        
+        let baralho = [];
+        let minhaMao = [];
+        let cartaNaMesa = null;
+        let conexao = null;
+
+        // Verifica se a biblioteca carregou
+        if (typeof Peer === 'undefined') {
+            document.getElementById('meu-codigo').innerText = 'Sem internet';
+            document.getElementById('status-conexao').innerText = 'Erro: não foi possível baixar o PeerJS.';
+        } else {
+            const idCurto = 'UNO-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+            const peer = new Peer(idCurto, { debug: 2 });
+
+            peer.on('open', (id) => {
+                document.getElementById('meu-codigo').innerText = id;
+                document.getElementById('status-conexao').innerText = 'Pronto! Compartilhe seu código.';
+            });
+
+            // Mostra na tela se houver algum erro de conexão
+            peer.on('error', (err) => {
+                document.getElementById('meu-codigo').innerText = 'Erro';
+                document.getElementById('status-conexao').innerText = 'Motivo: ' + err.type;
+            });
+
+            peer.on('connection', (conn) => {
+                conexao = conn;
+                configurarRecebimento();
+                document.getElementById('status-conexao').innerText = 'Amigo conectado!';
+                setTimeout(() => {
+                    conexao.send({ tipo: 'sincronizar', carta: cartaNaMesa });
+                }, 500);
+            });
+
+            window.conectarAmigo = function() {
+                const codigoDigitado = document.getElementById('codigo-amigo').value.trim().toUpperCase();
+                if (!codigoDigitado) return;
+
+                conexao = peer.connect(codigoDigitado);
+                configurarRecebimento();
+                document.getElementById('status-conexao').innerText = 'Conectado à sala ' + codigoDigitado + '!';
+            };
+        }
+
+        function configurarRecebimento() {
+            conexao.on('data', (dados) => {
+                if (dados.tipo === 'jogada' || dados.tipo === 'sincronizar') {
+                    cartaNaMesa = dados.carta;
+                    document.getElementById('mensagem').innerText = 'O oponente jogou uma carta!';
+                    atualizarTela();
+                }
+            });
+        }
+
+        // --- LÓGICA DO BARALHO ---
+        for (let cor of cores) {
+            for (let valor of valores) {
+                baralho.push({ cor: cor, valor: valor });
+            }
+        }
+        baralho.sort(() => Math.random() - 0.5);
+
+        for (let i = 0; i < 7; i++) {
+            minhaMao.push(baralho.pop());
+        }
+        cartaNaMesa = baralho.pop();
+
+        function atualizarTela() {
+            const divMesa = document.getElementById('carta-mesa');
+            divMesa.className = `carta ${cartaNaMesa.cor}`;
+            divMesa.innerText = cartaNaMesa.valor;
+
+            const areaMao = document.getElementById('minha-mao');
+            areaMao.innerHTML = '';
+
+            minhaMao.forEach((carta, posicao) => {
+                const divCarta = document.createElement('div');
+                divCarta.className = `carta ${carta.cor}`;
+                divCarta.innerText = carta.valor;
+                divCarta.onclick = () => jogarCarta(posicao);
+                areaMao.appendChild(divCarta);
+            });
+        }
+
+        function jogarCarta(posicao) {
+            const cartaEscolhida = minhaMao[posicao];
+            const msg = document.getElementById('mensagem');
+
+            if (cartaEscolhida.cor === cartaNaMesa.cor || cartaEscolhida.valor === cartaNaMesa.valor) {
+                cartaNaMesa = cartaEscolhida;
+                minhaMao.splice(posicao, 1);
+                msg.innerText = 'Você jogou!';
+
+                if (conexao && conexao.open) {
+                    conexao.send({ tipo: 'jogada', carta: cartaNaMesa });
+                }
+
+                if (minhaMao.length === 0) {
+                    msg.innerText = 'PARABÉNS! VOCÊ VENCEU!';
+                }
+            } else {
+                msg.innerText = 'Jogada inválida!';
+            }
+
+            atualizarTela();
+        }
+
+        function comprarCarta() {
+            if (baralho.length > 0) {
+                minhaMao.push(baralho.pop());
+                document.getElementById('mensagem').innerText = 'Você comprou uma carta.';
+                atualizarTela();
+            }
+        }
+
+        atualizarTela();
+    </script>
+
+</body>
+</html>
