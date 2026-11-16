@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meu UNO Online</title>
-    <script src="https://unpkg.com"></script>
+    <script src="https://jsdelivr.net"></script>
     <style>
         body {
             background-color: #1b5e20;
@@ -115,7 +115,7 @@
             Sala Atual: <strong id="codigo-exibido" style="color: #fdd835; font-size: 22px;"></strong>
         </div>
         <div id="status-conexao" style="margin-top: 8px; color: #a5d6a7; font-weight: bold;">
-            Conectando ao servidor...
+            Buscando servidor disponível...
         </div>
     </div>
 
@@ -146,38 +146,68 @@
         let cartaNaMesa = null;
         let topicoSala = '';
         let conectadoNoServidor = false;
+        let cliente = null;
 
         const meuId = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-        // Conecta ao servidor público EMQX (mais rápido e estável)
-        const cliente = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
-            clientId: 'uno_' + meuId
-        });
+        // Lista de servidores (inclui porta 443 padrão que passa em qualquer Wi-Fi)
+        const servidores = [
+            'wss://mqtt.eclipseprojects.io:443/mqtt',
+            'wss://test.mosquitto.org:8081/mqtt',
+            'wss://broker.emqx.io:8084/mqtt'
+        ];
 
-        cliente.on('connect', () => {
-            conectadoNoServidor = true;
-            document.getElementById('status-conexao').innerText = 'Servidor Online! Crie ou entre em uma sala.';
-        });
-
-        cliente.on('error', () => {
-            document.getElementById('status-conexao').innerText = 'Falha na rede. Atualize a página.';
-        });
-
-        cliente.on('message', (topico, mensagem) => {
-            const dados = JSON.parse(mensagem.toString());
-            if (dados.remetente === meuId) return;
-
-            if (dados.tipo === 'entrou') {
-                document.getElementById('status-conexao').innerText = 'Colega entrou! Partida iniciada!';
-                enviarDados({ tipo: 'sincronizar', carta: cartaNaMesa });
+        function tentarConectar(indice) {
+            if (indice >= servidores.length) {
+                document.getElementById('status-conexao').innerText = 'Bloqueio na rede. Teste no 4G do celular.';
+                return;
             }
 
-            if (dados.tipo === 'jogada' || dados.tipo === 'sincronizar') {
-                cartaNaMesa = dados.carta;
-                document.getElementById('mensagem').innerText = 'O oponente jogou!';
-                atualizarTela();
-            }
-        });
+            document.getElementById('status-conexao').innerText = `Conectando (Servidor ${indice + 1})...`;
+            
+            cliente = mqtt.connect(servidores[indice], {
+                clientId: 'uno_' + meuId + '_' + indice,
+                connectTimeout: 4000,
+                reconnectPeriod: 0
+            });
+
+            cliente.on('connect', () => {
+                conectadoNoServidor = true;
+                document.getElementById('status-conexao').innerText = 'Servidor Online! Crie ou entre em uma sala.';
+            });
+
+            cliente.on('error', () => {
+                cliente.end();
+                tentarConectar(indice + 1);
+            });
+
+            // Se demorar mais de 4 segundos, pula para o próximo servidor
+            setTimeout(() => {
+                if (!conectadoNoServidor && cliente) {
+                    cliente.end();
+                    tentarConectar(indice + 1);
+                }
+            }, 4200);
+
+            cliente.on('message', (topico, mensagem) => {
+                const dados = JSON.parse(mensagem.toString());
+                if (dados.remetente === meuId) return;
+
+                if (dados.tipo === 'entrou') {
+                    document.getElementById('status-conexao').innerText = 'Colega entrou! Partida iniciada!';
+                    enviarDados({ tipo: 'sincronizar', carta: cartaNaMesa });
+                }
+
+                if (dados.tipo === 'jogada' || dados.tipo === 'sincronizar') {
+                    cartaNaMesa = dados.carta;
+                    document.getElementById('mensagem').innerText = 'O oponente jogou!';
+                    atualizarTela();
+                }
+            });
+        }
+
+        // Inicia tentando o primeiro servidor (porta 443)
+        tentarConectar(0);
 
         function enviarDados(objeto) {
             if (!topicoSala || !conectadoNoServidor) return;
@@ -256,31 +286,3 @@
             const msg = document.getElementById('mensagem');
 
             if (cartaEscolhida.cor === cartaNaMesa.cor || cartaEscolhida.valor === cartaNaMesa.valor) {
-                cartaNaMesa = cartaEscolhida;
-                minhaMao.splice(posicao, 1);
-                msg.innerText = 'Você jogou!';
-                enviarDados({ tipo: 'jogada', carta: cartaNaMesa });
-
-                if (minhaMao.length === 0) {
-                    msg.innerText = 'PARABÉNS! VOCÊ VENCEU!';
-                }
-            } else {
-                msg.innerText = 'Jogada inválida!';
-            }
-
-            atualizarTela();
-        }
-
-        function comprarCarta() {
-            if (baralho.length > 0) {
-                minhaMao.push(baralho.pop());
-                document.getElementById('mensagem').innerText = 'Você comprou uma carta.';
-                atualizarTela();
-            }
-        }
-
-        atualizarTela();
-    </script>
-
-</body>
-</html>
