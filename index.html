@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meu UNO Online</title>
-    <!-- Biblioteca gratuita e rápida para conexão em tempo real -->
     <script src="https://unpkg.com"></script>
     <style>
         body {
@@ -22,34 +21,40 @@
         }
 
         .painel-online {
-            background: rgba(0, 0, 0, 0.4);
-            padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 12px;
             border-radius: 10px;
             text-align: center;
             font-size: 14px;
             width: 100%;
-            max-width: 350px;
+            max-width: 360px;
         }
 
         .painel-online input {
             padding: 8px;
             border-radius: 5px;
             border: none;
-            width: 110px;
+            width: 100px;
             text-transform: uppercase;
             text-align: center;
             font-weight: bold;
-            font-size: 15px;
+            font-size: 16px;
         }
 
         .painel-online button {
-            padding: 8px 14px;
+            padding: 8px 12px;
             border-radius: 5px;
             border: none;
             background: #fdd835;
             font-weight: bold;
             cursor: pointer;
-            font-size: 15px;
+            font-size: 14px;
+            margin: 2px;
+        }
+
+        .btn-criar {
+            background: #4caf50 !important;
+            color: white;
         }
 
         .centro-mesa {
@@ -99,12 +104,19 @@
 <body>
 
     <div class="painel-online">
-        <div>Seu Código da Sala: <strong id="meu-codigo" style="color: #fdd835; font-size: 20px;">---</strong></div>
-        <div style="margin-top: 8px;">
-            <input type="text" id="codigo-amigo" placeholder="Ex: A1B2">
-            <button onclick="entrarNaSala()">Entrar</button>
+        <div id="area-botoes">
+            <button class="btn-criar" onclick="criarSala()">1. Criar Nova Sala</button>
+            <div style="margin-top: 8px;">
+                <input type="text" id="codigo-amigo" placeholder="Código">
+                <button onclick="entrarNaSala()">2. Entrar na Sala</button>
+            </div>
         </div>
-        <div id="status-conexao" style="margin-top: 6px; color: #a5d6a7;">Conectando ao servidor...</div>
+        <div id="info-sala" style="display: none; font-size: 16px;">
+            Sala Atual: <strong id="codigo-exibido" style="color: #fdd835; font-size: 22px;"></strong>
+        </div>
+        <div id="status-conexao" style="margin-top: 8px; color: #a5d6a7; font-weight: bold;">
+            Conectando ao servidor...
+        </div>
     </div>
 
     <h3 id="mensagem" style="margin: 5px 0; text-align: center;">Jogue uma carta!</h3>
@@ -132,62 +144,81 @@
         let baralho = [];
         let minhaMao = [];
         let cartaNaMesa = null;
+        let topicoSala = '';
+        let conectadoNoServidor = false;
 
-        // Gera um código curto de 4 caracteres na hora (Ex: X9A2)
-        const meuId = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const salaAtual = meuId;
-        let topicoSala = 'jogo-uno-claudinei/' + salaAtual;
+        const meuId = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-        document.getElementById('meu-codigo').innerText = meuId;
-
-        // Conecta ao servidor gratuito HiveMQ via WebSocket seguro (WSS)
-        const cliente = mqtt.connect('wss://://hivemq.com');
+        // Conecta ao servidor público EMQX (mais rápido e estável)
+        const cliente = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+            clientId: 'uno_' + meuId
+        });
 
         cliente.on('connect', () => {
-            document.getElementById('status-conexao').innerText = 'Online! Passe o código ' + meuId + ' ao amigo.';
-            cliente.subscribe(topicoSala);
+            conectadoNoServidor = true;
+            document.getElementById('status-conexao').innerText = 'Servidor Online! Crie ou entre em uma sala.';
         });
 
-        cliente.on('error', (erro) => {
-            document.getElementById('status-conexao').innerText = 'Erro de conexão. Tente atualizar a página.';
+        cliente.on('error', () => {
+            document.getElementById('status-conexao').innerText = 'Falha na rede. Atualize a página.';
         });
 
-        // Recebe as jogadas enviadas na sala
         cliente.on('message', (topico, mensagem) => {
             const dados = JSON.parse(mensagem.toString());
-            
-            // Ignora mensagens enviadas por você mesmo
             if (dados.remetente === meuId) return;
 
             if (dados.tipo === 'entrou') {
-                document.getElementById('status-conexao').innerText = 'Seu colega entrou na sala!';
-                // Envia a carta da mesa para o colega ficar igual à sua
+                document.getElementById('status-conexao').innerText = 'Colega entrou! Partida iniciada!';
                 enviarDados({ tipo: 'sincronizar', carta: cartaNaMesa });
             }
 
             if (dados.tipo === 'jogada' || dados.tipo === 'sincronizar') {
                 cartaNaMesa = dados.carta;
-                document.getElementById('mensagem').innerText = 'O oponente jogou uma carta!';
+                document.getElementById('mensagem').innerText = 'O oponente jogou!';
                 atualizarTela();
             }
         });
 
         function enviarDados(objeto) {
+            if (!topicoSala || !conectadoNoServidor) return;
             objeto.remetente = meuId;
             cliente.publish(topicoSala, JSON.stringify(objeto));
         }
 
-        // Função quando o colega digita o seu código e clica em Entrar
+        function criarSala() {
+            if (!conectadoNoServidor) {
+                alert('Aguarde o texto ficar "Servidor Online!" primeiro.');
+                return;
+            }
+            const codigoSala = Math.random().toString(36).substring(2, 6).toUpperCase();
+            topicoSala = 'uno-claudinei-sala-' + codigoSala;
+            cliente.subscribe(topicoSala);
+
+            document.getElementById('area-botoes').style.display = 'none';
+            document.getElementById('info-sala').style.display = 'block';
+            document.getElementById('codigo-exibido').innerText = codigoSala;
+            document.getElementById('status-conexao').innerText = 'Passe esse código ao colega!';
+        }
+
         function entrarNaSala() {
+            if (!conectadoNoServidor) {
+                alert('Aguarde o texto ficar "Servidor Online!" primeiro.');
+                return;
+            }
             const codigoDigitado = document.getElementById('codigo-amigo').value.trim().toUpperCase();
             if (!codigoDigitado) return;
 
-            cliente.unsubscribe(topicoSala);
-            topicoSala = 'jogo-uno-claudinei/' + codigoDigitado;
+            topicoSala = 'uno-claudinei-sala-' + codigoDigitado;
             cliente.subscribe(topicoSala);
 
-            document.getElementById('status-conexao').innerText = 'Conectado à sala ' + codigoDigitado + '!';
-            enviarDados({ tipo: 'entrou' });
+            document.getElementById('area-botoes').style.display = 'none';
+            document.getElementById('info-sala').style.display = 'block';
+            document.getElementById('codigo-exibido').innerText = codigoDigitado;
+            document.getElementById('status-conexao').innerText = 'Conectado! Aguardando jogada...';
+            
+            setTimeout(() => {
+                enviarDados({ tipo: 'entrou' });
+            }, 500);
         }
 
         // --- LÓGICA DO BARALHO ---
@@ -228,8 +259,6 @@
                 cartaNaMesa = cartaEscolhida;
                 minhaMao.splice(posicao, 1);
                 msg.innerText = 'Você jogou!';
-
-                // Envia a jogada para a sala
                 enviarDados({ tipo: 'jogada', carta: cartaNaMesa });
 
                 if (minhaMao.length === 0) {
