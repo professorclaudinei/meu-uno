@@ -3,15 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meu UNO</title>
+<title>Meu UNO Online</title>
 <style>
-  body { background: #1b5e20; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: 15px; box-sizing: border-box; }
-  .mao { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-  .centro { display: flex; gap: 25px; align-items: center; }
-  .carta { width: 72px; height: 110px; border: 5px solid white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: bold; box-shadow: 0 5px 10px rgba(0,0,0,0.4); cursor: pointer; user-select: none; transition: 0.2s; }
-  .mao .carta:hover { transform: translateY(-15px); }
-  .verso { background: #212121; font-size: 18px; }
-  .bot-carta { width: 45px; height: 68px; border: 3px solid white; border-radius: 6px; background: #212121; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  body { background: #1b5e20; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: 10px; box-sizing: border-box; }
+  .topo-online { background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 10px; text-align: center; font-size: 13px; width: 100%; max-width: 360px; }
+  .topo-online input { width: 85px; padding: 5px; border-radius: 5px; border: none; text-align: center; font-weight: bold; text-transform: uppercase; }
+  .topo-online button { padding: 5px 10px; border-radius: 5px; border: none; background: #fdd835; font-weight: bold; cursor: pointer; }
+  .mao { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .centro { display: flex; gap: 20px; align-items: center; }
+  .carta { width: 68px; height: 102px; border: 4px solid white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: bold; box-shadow: 0 5px 10px rgba(0,0,0,0.4); cursor: pointer; user-select: none; transition: 0.2s; }
+  .mao .carta:hover { transform: translateY(-12px); }
+  .verso { background: #212121; font-size: 16px; }
+  .bot-carta { width: 38px; height: 56px; border: 2px solid white; border-radius: 5px; background: #212121; display: flex; align-items: center; justify-content: center; font-size: 10px; }
   .vermelho { background: #e53935; }
   .azul { background: #1e88e5; }
   .verde { background: #43a047; }
@@ -20,33 +23,107 @@
 </head>
 <body>
 
-<div>
-  <p style="text-align:center; margin:0 0 5px 0;">Oponente (<span id="qtd-bot">7</span> cartas)</p>
-  <div class="mao" id="mao-bot"></div>
+<div class="topo-online">
+  <div id="controles-sala">
+    Seu Código: <strong id="meu-cod" style="color:#fdd835; font-size:16px;"></strong> | 
+    <input type="text" id="cod-amigo" placeholder="Código">
+    <button onclick="entrarSala()">Entrar</button>
+  </div>
+  <div id="status-sala" style="color:#a5d6a7; margin-top:4px;">Modo Solo (vs Robô) — Ou passe seu código!</div>
 </div>
 
-<h3 id="msg" style="margin:5px 0; text-align:center;">Sua vez! Jogue uma carta.</h3>
+<div>
+  <p style="text-align:center; margin:0 0 4px 0; font-size:14px;"><span id="nome-oponente">Robô</span> (<span id="qtd-op">7</span> cartas)</p>
+  <div class="mao" id="mao-op"></div>
+</div>
+
+<h3 id="msg" style="margin:4px 0; text-align:center; font-size:16px;">Sua vez! Jogue uma carta.</h3>
 
 <div class="centro">
   <div>
-    <p style="text-align:center; margin:0 0 5px 0;">Comprar</p>
+    <p style="text-align:center; margin:0 0 4px 0; font-size:13px;">Comprar</p>
     <div class="carta verso" onclick="comprarJogador()">UNO</div>
   </div>
   <div>
-    <p style="text-align:center; margin:0 0 5px 0;">Mesa</p>
+    <p style="text-align:center; margin:0 0 4px 0; font-size:13px;">Mesa</p>
     <div class="carta" id="mesa"></div>
   </div>
 </div>
 
 <div>
-  <p style="text-align:center; margin:0 0 8px 0;">Suas Cartas:</p>
+  <p style="text-align:center; margin:0 0 6px 0; font-size:14px;">Suas Cartas:</p>
   <div class="mao" id="minha-mao"></div>
 </div>
 
 <script>
 const cores = ['vermelho', 'azul', 'verde', 'amarelo'];
 const valores = ['0','1','2','3','4','5','6','7','8','9','+2','🚫','🔄'];
-let baralho = [], maoJogador = [], maoBot = [], mesa = null, turnoJogador = true;
+let baralho = [], maoJogador = [], maoOp = [], mesa = null, minhaVez = true;
+let modoOnline = false, salaAtual = '', fonteEventos = null;
+
+// Gera código imediato sem precisar esperar servidor
+const meuId = Math.random().toString(36).substring(2, 6).toUpperCase();
+document.getElementById('meu-cod').innerText = meuId;
+escutarSala(meuId);
+
+function escutarSala(codigo) {
+  salaAtual = 'uno-claudinei-' + codigo;
+  if (fonteEventos) fonteEventos.close();
+  fonteEventos = new EventSource(`https://ntfy.sh{salaAtual}/sse`);
+  
+  fonteEventos.onmessage = (e) => {
+    const pacote = JSON.parse(e.data);
+    if (!pacote.message) return;
+    const dados = JSON.parse(pacote.message);
+    if (dados.remetente === meuId) return;
+
+    if (dados.tipo === 'entrou') {
+      ativarModoOnline(codigo);
+      enviarOnline({ tipo: 'sinc', mesa: mesa, qtd: maoJogador.length });
+    }
+    if (dados.tipo === 'sinc') {
+      ativarModoOnline(codigo);
+      mesa = dados.mesa;
+      maoOp = Array(dados.qtd).fill({});
+      minhaVez = false;
+      document.getElementById('msg').innerText = 'Conectado! Aguarde a jogada do amigo.';
+      atualizar();
+    }
+    if (dados.tipo === 'jogada') {
+      mesa = dados.mesa;
+      maoOp = Array(dados.qtd).fill({});
+      if (dados.efeito === '+2') { comprar(maoJogador, 2); document.getElementById('msg').innerText = 'Amigo jogou +2! Você comprou 2.'; }
+      else if (dados.efeito === 'pular') { document.getElementById('msg').innerText = 'Amigo te pulou! Vez dele.'; }
+      else { minhaVez = true; document.getElementById('msg').innerText = 'Sua vez!'; }
+      if (dados.qtd === 0) document.getElementById('msg').innerText = 'Seu amigo venceu! 🏆';
+      atualizar();
+    }
+    if (dados.tipo === 'comprou') {
+      maoOp = Array(dados.qtd).fill({});
+      minhaVez = true;
+      document.getElementById('msg').innerText = 'Amigo comprou carta. Sua vez!';
+      atualizar();
+    }
+  };
+}
+
+function ativarModoOnline(cod) {
+  modoOnline = true;
+  document.getElementById('nome-oponente').innerText = 'Amigo';
+  document.getElementById('status-sala').innerText = '🟢 Online na Sala: ' + cod;
+}
+
+function enviarOnline(obj) {
+  obj.remetente = meuId;
+  fetch(`https://ntfy.sh{salaAtual}`, { method: 'POST', body: JSON.stringify(obj) });
+}
+
+function entrarSala() {
+  const cod = document.getElementById('cod-amigo').value.trim().toUpperCase();
+  if (!cod) return;
+  escutarSala(cod);
+  setTimeout(() => enviarOnline({ tipo: 'entrou' }), 500);
+}
 
 function criarBaralho() {
   baralho = [];
@@ -55,7 +132,7 @@ function criarBaralho() {
 }
 
 criarBaralho();
-for (let i = 0; i < 7; i++) { maoJogador.push(baralho.pop()); maoBot.push(baralho.pop()); }
+for (let i = 0; i < 7; i++) { maoJogador.push(baralho.pop()); maoOp.push(baralho.pop()); }
 mesa = baralho.pop();
 
 function atualizar() {
@@ -63,10 +140,10 @@ function atualizar() {
   divMesa.className = `carta ${mesa.cor}`;
   divMesa.innerText = mesa.valor;
 
-  document.getElementById('qtd-bot').innerText = maoBot.length;
-  const divBot = document.getElementById('mao-bot');
-  divBot.innerHTML = '';
-  maoBot.forEach(() => { divBot.innerHTML += '<div class="bot-carta">UNO</div>'; });
+  document.getElementById('qtd-op').innerText = maoOp.length;
+  const divOp = document.getElementById('mao-op');
+  divOp.innerHTML = '';
+  maoOp.forEach(() => { divOp.innerHTML += '<div class="bot-carta">UNO</div>'; });
 
   const divJog = document.getElementById('minha-mao');
   divJog.innerHTML = '';
@@ -87,51 +164,67 @@ function comprar(mao, qtd) {
 }
 
 function jogar(i) {
-  if (!turnoJogador) return;
+  if (!minhaVez) return;
   const c = maoJogador[i];
   if (c.cor === mesa.cor || c.valor === mesa.valor) {
     mesa = c;
     maoJogador.splice(i, 1);
-    if (maoJogador.length === 0) { document.getElementById('msg').innerText = 'VOCÊ VENCEU! 🎉'; atualizar(); return; }
-    
-    if (c.valor === '+2') { comprar(maoBot, 2); document.getElementById('msg').innerText = 'Oponente comprou +2! Sua vez de novo.'; atualizar(); return; }
-    if (c.valor === '🚫' || c.valor === '🔄') { document.getElementById('msg').innerText = 'Oponente pulado! Sua vez de novo.'; atualizar(); return; }
+    let efeito = '';
+    if (c.valor === '+2') efeito = '+2';
+    if (c.valor === '🚫' || c.valor === '🔄') efeito = 'pular';
 
-    turnoJogador = false;
-    document.getElementById('msg').innerText = 'Vez do oponente...';
+    if (modoOnline) {
+      if (!efeito) minhaVez = false;
+      document.getElementById('msg').innerText = maoJogador.length === 0 ? 'VOCÊ VENCEU! 🎉' : (efeito ? 'Jogue de novo!' : 'Vez do amigo...');
+      enviarOnline({ tipo: 'jogada', mesa: mesa, qtd: maoJogador.length, efeito: efeito });
+      atualizar();
+      return;
+    }
+
+    if (maoJogador.length === 0) { document.getElementById('msg').innerText = 'VOCÊ VENCEU! 🎉'; atualizar(); return; }
+    if (efeito === '+2') { comprar(maoOp, 2); document.getElementById('msg').innerText = 'Robô comprou +2! Sua vez.'; atualizar(); return; }
+    if (efeito === 'pular') { document.getElementById('msg').innerText = 'Robô pulado! Sua vez.'; atualizar(); return; }
+
+    minhaVez = false;
+    document.getElementById('msg').innerText = 'Vez do robô...';
     atualizar();
-    setTimeout(vezDoBot, 1200);
+    setTimeout(vezDoBot, 1000);
   } else {
-    document.getElementById('msg').innerText = 'Carta inválida! Mesma cor ou símbolo.';
+    document.getElementById('msg').innerText = 'Carta inválida!';
   }
 }
 
 function comprarJogador() {
-  if (!turnoJogador) return;
+  if (!minhaVez) return;
   comprar(maoJogador, 1);
-  turnoJogador = false;
-  document.getElementById('msg').innerText = 'Você comprou. Vez do oponente...';
+  minhaVez = false;
+  if (modoOnline) {
+    document.getElementById('msg').innerText = 'Você comprou. Vez do amigo...';
+    enviarOnline({ tipo: 'comprou', qtd: maoJogador.length });
+    atualizar();
+    return;
+  }
+  document.getElementById('msg').innerText = 'Você comprou. Vez do robô...';
   atualizar();
-  setTimeout(vezDoBot, 1200);
+  setTimeout(vezDoBot, 1000);
 }
 
 function vezDoBot() {
-  const idx = maoBot.findIndex(c => c.cor === mesa.cor || c.valor === mesa.valor);
+  if (modoOnline) return;
+  const idx = maoOp.findIndex(c => c.cor === mesa.cor || c.valor === mesa.valor);
   if (idx !== -1) {
-    const c = maoBot[idx];
+    const c = maoOp[idx];
     mesa = c;
-    maoBot.splice(idx, 1);
-    if (maoBot.length === 0) { document.getElementById('msg').innerText = 'O oponente venceu! 🤖'; atualizar(); return; }
-    
-    if (c.valor === '+2') { comprar(maoJogador, 2); document.getElementById('msg').innerText = 'Oponente jogou +2! Você comprou 2.'; atualizar(); setTimeout(vezDoBot, 1200); return; }
-    if (c.valor === '🚫' || c.valor === '🔄') { document.getElementById('msg').innerText = 'Oponente te pulou!'; atualizar(); setTimeout(vezDoBot, 1200); return; }
-    
+    maoOp.splice(idx, 1);
+    if (maoOp.length === 0) { document.getElementById('msg').innerText = 'O robô venceu! 🤖'; atualizar(); return; }
+    if (c.valor === '+2') { comprar(maoJogador, 2); document.getElementById('msg').innerText = 'Robô jogou +2! Você comprou 2.'; atualizar(); setTimeout(vezDoBot, 1000); return; }
+    if (c.valor === '🚫' || c.valor === '🔄') { document.getElementById('msg').innerText = 'Robô te pulou!'; atualizar(); setTimeout(vezDoBot, 1000); return; }
     document.getElementById('msg').innerText = 'Sua vez!';
   } else {
-    comprar(maoBot, 1);
-    document.getElementById('msg').innerText = 'Oponente comprou carta. Sua vez!';
+    comprar(maoOp, 1);
+    document.getElementById('msg').innerText = 'Robô comprou. Sua vez!';
   }
-  turnoJogador = true;
+  minhaVez = true;
   atualizar();
 }
 
