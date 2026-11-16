@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Meu UNO Online</title>
-    <!-- Link mais estável da biblioteca PeerJS -->
-    <script src="https://jsdelivr.net"></script>
+    <!-- Biblioteca gratuita e rápida para conexão em tempo real -->
+    <script src="https://unpkg.com"></script>
     <style>
         body {
             background-color: #1b5e20;
@@ -27,25 +27,29 @@
             border-radius: 10px;
             text-align: center;
             font-size: 14px;
+            width: 100%;
+            max-width: 350px;
         }
 
         .painel-online input {
-            padding: 6px;
+            padding: 8px;
             border-radius: 5px;
             border: none;
             width: 110px;
             text-transform: uppercase;
             text-align: center;
             font-weight: bold;
+            font-size: 15px;
         }
 
         .painel-online button {
-            padding: 6px 12px;
+            padding: 8px 14px;
             border-radius: 5px;
             border: none;
             background: #fdd835;
             font-weight: bold;
             cursor: pointer;
+            font-size: 15px;
         }
 
         .centro-mesa {
@@ -95,12 +99,12 @@
 <body>
 
     <div class="painel-online">
-        <div>Seu Código da Sala: <strong id="meu-codigo" style="color: #fdd835; font-size: 18px;">Conectando...</strong></div>
+        <div>Seu Código da Sala: <strong id="meu-codigo" style="color: #fdd835; font-size: 20px;">---</strong></div>
         <div style="margin-top: 8px;">
-            <input type="text" id="codigo-amigo" placeholder="Código do amigo">
-            <button onclick="conectarAmigo()">Entrar</button>
+            <input type="text" id="codigo-amigo" placeholder="Ex: A1B2">
+            <button onclick="entrarNaSala()">Entrar</button>
         </div>
-        <div id="status-conexao" style="margin-top: 5px; color: #a5d6a7;">Aguardando servidor...</div>
+        <div id="status-conexao" style="margin-top: 6px; color: #a5d6a7;">Conectando ao servidor...</div>
     </div>
 
     <h3 id="mensagem" style="margin: 5px 0; text-align: center;">Jogue uma carta!</h3>
@@ -128,54 +132,62 @@
         let baralho = [];
         let minhaMao = [];
         let cartaNaMesa = null;
-        let conexao = null;
 
-        // Verifica se a biblioteca carregou
-        if (typeof Peer === 'undefined') {
-            document.getElementById('meu-codigo').innerText = 'Sem internet';
-            document.getElementById('status-conexao').innerText = 'Erro: não foi possível baixar o PeerJS.';
-        } else {
-            const idCurto = 'UNO-' + Math.random().toString(36).substring(2, 6).toUpperCase();
-            const peer = new Peer(idCurto, { debug: 2 });
+        // Gera um código curto de 4 caracteres na hora (Ex: X9A2)
+        const meuId = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const salaAtual = meuId;
+        let topicoSala = 'jogo-uno-claudinei/' + salaAtual;
 
-            peer.on('open', (id) => {
-                document.getElementById('meu-codigo').innerText = id;
-                document.getElementById('status-conexao').innerText = 'Pronto! Compartilhe seu código.';
-            });
+        document.getElementById('meu-codigo').innerText = meuId;
 
-            // Mostra na tela se houver algum erro de conexão
-            peer.on('error', (err) => {
-                document.getElementById('meu-codigo').innerText = 'Erro';
-                document.getElementById('status-conexao').innerText = 'Motivo: ' + err.type;
-            });
+        // Conecta ao servidor gratuito HiveMQ via WebSocket seguro (WSS)
+        const cliente = mqtt.connect('wss://://hivemq.com');
 
-            peer.on('connection', (conn) => {
-                conexao = conn;
-                configurarRecebimento();
-                document.getElementById('status-conexao').innerText = 'Amigo conectado!';
-                setTimeout(() => {
-                    conexao.send({ tipo: 'sincronizar', carta: cartaNaMesa });
-                }, 500);
-            });
+        cliente.on('connect', () => {
+            document.getElementById('status-conexao').innerText = 'Online! Passe o código ' + meuId + ' ao amigo.';
+            cliente.subscribe(topicoSala);
+        });
 
-            window.conectarAmigo = function() {
-                const codigoDigitado = document.getElementById('codigo-amigo').value.trim().toUpperCase();
-                if (!codigoDigitado) return;
+        cliente.on('error', (erro) => {
+            document.getElementById('status-conexao').innerText = 'Erro de conexão. Tente atualizar a página.';
+        });
 
-                conexao = peer.connect(codigoDigitado);
-                configurarRecebimento();
-                document.getElementById('status-conexao').innerText = 'Conectado à sala ' + codigoDigitado + '!';
-            };
+        // Recebe as jogadas enviadas na sala
+        cliente.on('message', (topico, mensagem) => {
+            const dados = JSON.parse(mensagem.toString());
+            
+            // Ignora mensagens enviadas por você mesmo
+            if (dados.remetente === meuId) return;
+
+            if (dados.tipo === 'entrou') {
+                document.getElementById('status-conexao').innerText = 'Seu colega entrou na sala!';
+                // Envia a carta da mesa para o colega ficar igual à sua
+                enviarDados({ tipo: 'sincronizar', carta: cartaNaMesa });
+            }
+
+            if (dados.tipo === 'jogada' || dados.tipo === 'sincronizar') {
+                cartaNaMesa = dados.carta;
+                document.getElementById('mensagem').innerText = 'O oponente jogou uma carta!';
+                atualizarTela();
+            }
+        });
+
+        function enviarDados(objeto) {
+            objeto.remetente = meuId;
+            cliente.publish(topicoSala, JSON.stringify(objeto));
         }
 
-        function configurarRecebimento() {
-            conexao.on('data', (dados) => {
-                if (dados.tipo === 'jogada' || dados.tipo === 'sincronizar') {
-                    cartaNaMesa = dados.carta;
-                    document.getElementById('mensagem').innerText = 'O oponente jogou uma carta!';
-                    atualizarTela();
-                }
-            });
+        // Função quando o colega digita o seu código e clica em Entrar
+        function entrarNaSala() {
+            const codigoDigitado = document.getElementById('codigo-amigo').value.trim().toUpperCase();
+            if (!codigoDigitado) return;
+
+            cliente.unsubscribe(topicoSala);
+            topicoSala = 'jogo-uno-claudinei/' + codigoDigitado;
+            cliente.subscribe(topicoSala);
+
+            document.getElementById('status-conexao').innerText = 'Conectado à sala ' + codigoDigitado + '!';
+            enviarDados({ tipo: 'entrou' });
         }
 
         // --- LÓGICA DO BARALHO ---
@@ -217,9 +229,8 @@
                 minhaMao.splice(posicao, 1);
                 msg.innerText = 'Você jogou!';
 
-                if (conexao && conexao.open) {
-                    conexao.send({ tipo: 'jogada', carta: cartaNaMesa });
-                }
+                // Envia a jogada para a sala
+                enviarDados({ tipo: 'jogada', carta: cartaNaMesa });
 
                 if (minhaMao.length === 0) {
                     msg.innerText = 'PARABÉNS! VOCÊ VENCEU!';
