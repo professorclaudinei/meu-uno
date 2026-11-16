@@ -286,3 +286,24 @@
             const msg = document.getElementById('mensagem');
 
             if (cartaEscolhida.cor === cartaNaMesa.cor || cartaEscolhida.valor === cartaNaMesa.valor) {
+                cartaNaMesa = cartaEscolhida;
+minhaMao.splice(posicao, 1);
+msg.innerText = 'Você jogou!';
+enviarDados({ tipo: 'jogada', carta: cartaNaMesa });
+if (minhaMao.length === 0) {
+msg.innerText = 'PARABÉNS! VOCÊ VENCEU!';
+}
+} else {
+msg.innerText = 'Jogada inválida!';
+}
+atualizarTela();
+}
+function comprarCarta() {
+if (baralho.length > 0) {
+minhaMao.push(baralho.pop());
+document.getElementById('mensagem').innerText = 'Você comprou uma carta.';
+atualizarTela();
+}
+}
+atualizarTela();
+
