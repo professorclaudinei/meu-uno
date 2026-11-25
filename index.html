@@ -6,10 +6,10 @@
 <title>Meu UNO Online</title>
 <style>
   body { background: #1b5e20; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: 10px; box-sizing: border-box; }
-  .topo-online { background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 10px; text-align: center; font-size: 13px; width: 100%; max-width: 380px; }
+  .topo-online { background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 10px; text-align: center; font-size: 13px; width: 100%; max-width: 390px; }
   .linha-controles { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; }
-  .topo-online input { width: 70px; padding: 5px; border-radius: 5px; border: none; text-align: center; font-weight: bold; text-transform: uppercase; }
-  .topo-online button { padding: 5px 10px; border-radius: 5px; border: none; background: #fdd835; color: #111; font-weight: bold; cursor: pointer; }
+  .topo-online input { width: 68px; padding: 6px; border-radius: 5px; border: none; text-align: center; font-weight: bold; font-size: 14px; }
+  .topo-online button { padding: 6px 10px; border-radius: 5px; border: none; background: #fdd835; color: #111; font-weight: bold; cursor: pointer; }
   .btn-convidar { background: #4caf50 !important; color: white !important; }
   .mao { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
   .centro { display: flex; gap: 20px; align-items: center; }
@@ -28,12 +28,12 @@
 <div class="topo-online">
   <div class="linha-controles" id="controles-sala">
     <span>Sala: <strong id="meu-cod" style="color:#fdd835; font-size:16px;">----</strong></span>
-    <button class="btn-convidar" onclick="convidarAmigo()">📤 Convidar</button>
+    <button class="btn-convidar" onclick="convidarAmigo()">📤 Link</button>
     <span>|</span>
-    <input type="text" id="cod-amigo" placeholder="Código">
+    <input type="text" id="cod-amigo" inputmode="numeric" maxlength="4" placeholder="Código">
     <button onclick="entrarSala()">Entrar</button>
   </div>
-  <div id="status-sala" style="color:#a5d6a7; margin-top:6px;">Modo Solo (vs Robô) — Ou convide um amigo!</div>
+  <div id="status-sala" style="color:#a5d6a7; margin-top:6px;">Modo Solo (vs Robô) — Digite o código ou envie o Link!</div>
 </div>
 
 <div>
@@ -66,12 +66,27 @@ document.getElementById('meu-cod').innerText = meuId;
 const cores = ['vermelho', 'azul', 'verde', 'amarelo'];
 const valores = ['0','1','2','3','4','5','6','7','8','9','+2','🚫','🔄'];
 let baralho = [], maoJogador = [], maoOp = [], mesa = null, minhaVez = true;
-let modoOnline = false, salaAtual = '', fonteEventos = null;
+let modoOnline = false, salaAtual = '', fonteEventos = null, tentativaConexao = null;
 
-function escutarSala(codigo) {
+function escutarSala(codigo, souConvidado) {
   salaAtual = 'uno-claudinei-' + codigo;
   if (fonteEventos) fonteEventos.close();
+  if (tentativaConexao) clearInterval(tentativaConexao);
+
   fonteEventos = new EventSource('https://ntfy.sh/' + salaAtual + '/sse');
+
+  if (souConvidado) {
+    fonteEventos.onopen = function() {
+      enviarOnline({ tipo: 'entrou' });
+    };
+    tentativaConexao = setInterval(function() {
+      if (!modoOnline) {
+        enviarOnline({ tipo: 'entrou' });
+      } else {
+        clearInterval(tentativaConexao);
+      }
+    }, 2000);
+  }
   
   fonteEventos.onmessage = function(e) {
     const pacote = JSON.parse(e.data);
@@ -85,6 +100,7 @@ function escutarSala(codigo) {
     }
     if (dados.tipo === 'sinc') {
       ativarModoOnline(codigo);
+      if (tentativaConexao) clearInterval(tentativaConexao);
       mesa = dados.mesa;
       maoOp = Array(dados.qtd).fill({});
       minhaVez = false;
@@ -123,10 +139,10 @@ function enviarOnline(obj) {
 function entrarSala(codigoParam) {
   const cod = (codigoParam || document.getElementById('cod-amigo').value).trim().toUpperCase();
   if (!cod) return;
+  modoOnline = false;
   document.getElementById('cod-amigo').value = cod;
   document.getElementById('status-sala').innerText = '⏳ Conectando à sala ' + cod + '...';
-  escutarSala(cod);
-  setTimeout(function() { enviarOnline({ tipo: 'entrou' }); }, 600);
+  escutarSala(cod, true);
 }
 
 async function convidarAmigo() {
@@ -252,7 +268,7 @@ const salaConvite = params.get('sala');
 if (salaConvite) {
   entrarSala(salaConvite);
 } else {
-  escutarSala(meuId);
+  escutarSala(meuId, false);
 }
 
 atualizar();
