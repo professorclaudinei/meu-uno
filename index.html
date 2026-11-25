@@ -7,7 +7,7 @@
 <style>
   body { background: #1b5e20; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: 10px; box-sizing: border-box; }
   .topo-online { background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 10px; text-align: center; font-size: 13px; width: 100%; max-width: 380px; }
-  .linha-controles { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; align-items: center; }
+  .linha-controles { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; }
   .topo-online input { width: 70px; padding: 5px; border-radius: 5px; border: none; text-align: center; font-weight: bold; text-transform: uppercase; }
   .topo-online button { padding: 5px 10px; border-radius: 5px; border: none; background: #fdd835; color: #111; font-weight: bold; cursor: pointer; }
   .btn-convidar { background: #4caf50 !important; color: white !important; }
@@ -27,7 +27,7 @@
 
 <div class="topo-online">
   <div class="linha-controles" id="controles-sala">
-    <span>Sala: <strong id="meu-cod" style="color:#fdd835; font-size:15px;"></strong></span>
+    <span>Sala: <strong id="meu-cod" style="color:#fdd835; font-size:16px;">----</strong></span>
     <button class="btn-convidar" onclick="convidarAmigo()">📤 Convidar</button>
     <span>|</span>
     <input type="text" id="cod-amigo" placeholder="Código">
@@ -60,20 +60,20 @@
 </div>
 
 <script>
+const meuId = Math.floor(1000 + Math.random() * 9000).toString();
+document.getElementById('meu-cod').innerText = meuId;
+
 const cores = ['vermelho', 'azul', 'verde', 'amarelo'];
 const valores = ['0','1','2','3','4','5','6','7','8','9','+2','🚫','🔄'];
 let baralho = [], maoJogador = [], maoOp = [], mesa = null, minhaVez = true;
 let modoOnline = false, salaAtual = '', fonteEventos = null;
 
-const meuId = Math.random().toString(36).substring(2, 6).toUpperCase();
-document.getElementById('meu-cod').innerText = meuId;
-
 function escutarSala(codigo) {
   salaAtual = 'uno-claudinei-' + codigo;
   if (fonteEventos) fonteEventos.close();
-  fonteEventos = new EventSource(`https://ntfy.sh{salaAtual}/sse`);
+  fonteEventos = new EventSource('https://ntfy.sh/' + salaAtual + '/sse');
   
-  fonteEventos.onmessage = (e) => {
+  fonteEventos.onmessage = function(e) {
     const pacote = JSON.parse(e.data);
     if (!pacote.message) return;
     const dados = JSON.parse(pacote.message);
@@ -117,7 +117,7 @@ function ativarModoOnline(cod) {
 
 function enviarOnline(obj) {
   obj.remetente = meuId;
-  fetch(`https://ntfy.sh{salaAtual}`, { method: 'POST', body: JSON.stringify(obj) });
+  fetch('https://ntfy.sh/' + salaAtual, { method: 'POST', body: JSON.stringify(obj) });
 }
 
 function entrarSala(codigoParam) {
@@ -126,13 +126,13 @@ function entrarSala(codigoParam) {
   document.getElementById('cod-amigo').value = cod;
   document.getElementById('status-sala').innerText = '⏳ Conectando à sala ' + cod + '...';
   escutarSala(cod);
-  setTimeout(() => enviarOnline({ tipo: 'entrou' }), 600);
+  setTimeout(function() { enviarOnline({ tipo: 'entrou' }); }, 600);
 }
 
 async function convidarAmigo() {
-  const urlBase = window.location.href.split('?')[0];
-  const linkConvite = `${urlBase}?sala=${meuId}`;
-  const texto = `Vem jogar UNO comigo! Clique no link para entrar direto na minha sala (${meuId}): ${linkConvite}`;
+  const urlLimpa = window.location.origin + window.location.pathname;
+  const linkConvite = urlLimpa + '?sala=' + meuId;
+  const texto = 'Vem jogar UNO comigo! Clique no link para entrar na minha sala (' + meuId + '): ' + linkConvite;
 
   if (navigator.share) {
     try {
@@ -141,7 +141,7 @@ async function convidarAmigo() {
     } catch (e) {}
   }
   navigator.clipboard.writeText(texto);
-  alert('Link de convite copiado! Agora é só colar no WhatsApp do seu amigo:\n\n' + linkConvite);
+  alert('Link copiado! Cole no WhatsApp do seu amigo:\n\n' + linkConvite);
 }
 
 function criarBaralho() {
@@ -156,21 +156,21 @@ mesa = baralho.pop();
 
 function atualizar() {
   const divMesa = document.getElementById('mesa');
-  divMesa.className = `carta ${mesa.cor}`;
+  divMesa.className = 'carta ' + mesa.cor;
   divMesa.innerText = mesa.valor;
 
   document.getElementById('qtd-op').innerText = maoOp.length;
   const divOp = document.getElementById('mao-op');
   divOp.innerHTML = '';
-  maoOp.forEach(() => { divOp.innerHTML += '<div class="bot-carta">UNO</div>'; });
+  maoOp.forEach(function() { divOp.innerHTML += '<div class="bot-carta">UNO</div>'; });
 
   const divJog = document.getElementById('minha-mao');
   divJog.innerHTML = '';
-  maoJogador.forEach((c, i) => {
+  maoJogador.forEach(function(c, i) {
     const el = document.createElement('div');
-    el.className = `carta ${c.cor}`;
+    el.className = 'carta ' + c.cor;
     el.innerText = c.valor;
-    el.onclick = () => jogar(i);
+    el.onclick = function() { jogar(i); };
     divJog.appendChild(el);
   });
 }
@@ -240,18 +240,22 @@ function vezDoBot() {
     if (c.valor === '🚫' || c.valor === '🔄') { document.getElementById('msg').innerText = 'Robô te pulou!'; atualizar(); setTimeout(vezDoBot, 1000); return; }
     document.getElementById('msg').innerText = 'Sua vez!';
   } else {
-omprar(maoOp, 1);
-document.getElementById('msg').innerText = 'Robô comprou. Sua vez!';
+    comprar(maoOp, 1);
+    document.getElementById('msg').innerText = 'Robô comprou. Sua vez!';
+  }
+  minhaVez = true;
+  atualizar();
 }
-minhaVez = true;
-atualizar();
-}
-// Verifica se entrou pelo link de convite (?sala=XXXX) ou inicia sala própria
+
 const params = new URLSearchParams(window.location.search);
 const salaConvite = params.get('sala');
 if (salaConvite) {
-entrarSala(salaConvite);
+  entrarSala(salaConvite);
 } else {
-escutarSala(meuId);
+  escutarSala(meuId);
 }
+
 atualizar();
+</script>
+</body>
+</html>
