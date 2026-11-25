@@ -6,9 +6,11 @@
 <title>Meu UNO Online</title>
 <style>
   body { background: #1b5e20; color: white; font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 100vh; margin: 0; padding: 10px; box-sizing: border-box; }
-  .topo-online { background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 10px; text-align: center; font-size: 13px; width: 100%; max-width: 360px; }
-  .topo-online input { width: 85px; padding: 5px; border-radius: 5px; border: none; text-align: center; font-weight: bold; text-transform: uppercase; }
-  .topo-online button { padding: 5px 10px; border-radius: 5px; border: none; background: #fdd835; font-weight: bold; cursor: pointer; }
+  .topo-online { background: rgba(0,0,0,0.45); padding: 8px 12px; border-radius: 10px; text-align: center; font-size: 13px; width: 100%; max-width: 380px; }
+  .linha-controles { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; align-items: center; }
+  .topo-online input { width: 70px; padding: 5px; border-radius: 5px; border: none; text-align: center; font-weight: bold; text-transform: uppercase; }
+  .topo-online button { padding: 5px 10px; border-radius: 5px; border: none; background: #fdd835; color: #111; font-weight: bold; cursor: pointer; }
+  .btn-convidar { background: #4caf50 !important; color: white !important; }
   .mao { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
   .centro { display: flex; gap: 20px; align-items: center; }
   .carta { width: 68px; height: 102px; border: 4px solid white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 30px; font-weight: bold; box-shadow: 0 5px 10px rgba(0,0,0,0.4); cursor: pointer; user-select: none; transition: 0.2s; }
@@ -24,12 +26,14 @@
 <body>
 
 <div class="topo-online">
-  <div id="controles-sala">
-    Seu Código: <strong id="meu-cod" style="color:#fdd835; font-size:16px;"></strong> | 
+  <div class="linha-controles" id="controles-sala">
+    <span>Sala: <strong id="meu-cod" style="color:#fdd835; font-size:15px;"></strong></span>
+    <button class="btn-convidar" onclick="convidarAmigo()">📤 Convidar</button>
+    <span>|</span>
     <input type="text" id="cod-amigo" placeholder="Código">
     <button onclick="entrarSala()">Entrar</button>
   </div>
-  <div id="status-sala" style="color:#a5d6a7; margin-top:4px;">Modo Solo (vs Robô) — Ou passe seu código!</div>
+  <div id="status-sala" style="color:#a5d6a7; margin-top:6px;">Modo Solo (vs Robô) — Ou convide um amigo!</div>
 </div>
 
 <div>
@@ -61,10 +65,8 @@ const valores = ['0','1','2','3','4','5','6','7','8','9','+2','🚫','🔄'];
 let baralho = [], maoJogador = [], maoOp = [], mesa = null, minhaVez = true;
 let modoOnline = false, salaAtual = '', fonteEventos = null;
 
-// Gera código imediato sem precisar esperar servidor
 const meuId = Math.random().toString(36).substring(2, 6).toUpperCase();
 document.getElementById('meu-cod').innerText = meuId;
-escutarSala(meuId);
 
 function escutarSala(codigo) {
   salaAtual = 'uno-claudinei-' + codigo;
@@ -118,11 +120,28 @@ function enviarOnline(obj) {
   fetch(`https://ntfy.sh{salaAtual}`, { method: 'POST', body: JSON.stringify(obj) });
 }
 
-function entrarSala() {
-  const cod = document.getElementById('cod-amigo').value.trim().toUpperCase();
+function entrarSala(codigoParam) {
+  const cod = (codigoParam || document.getElementById('cod-amigo').value).trim().toUpperCase();
   if (!cod) return;
+  document.getElementById('cod-amigo').value = cod;
+  document.getElementById('status-sala').innerText = '⏳ Conectando à sala ' + cod + '...';
   escutarSala(cod);
-  setTimeout(() => enviarOnline({ tipo: 'entrou' }), 500);
+  setTimeout(() => enviarOnline({ tipo: 'entrou' }), 600);
+}
+
+async function convidarAmigo() {
+  const urlBase = window.location.href.split('?')[0];
+  const linkConvite = `${urlBase}?sala=${meuId}`;
+  const texto = `Vem jogar UNO comigo! Clique no link para entrar direto na minha sala (${meuId}): ${linkConvite}`;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Meu UNO Online', text: texto, url: linkConvite });
+      return;
+    } catch (e) {}
+  }
+  navigator.clipboard.writeText(texto);
+  alert('Link de convite copiado! Agora é só colar no WhatsApp do seu amigo:\n\n' + linkConvite);
 }
 
 function criarBaralho() {
@@ -221,14 +240,18 @@ function vezDoBot() {
     if (c.valor === '🚫' || c.valor === '🔄') { document.getElementById('msg').innerText = 'Robô te pulou!'; atualizar(); setTimeout(vezDoBot, 1000); return; }
     document.getElementById('msg').innerText = 'Sua vez!';
   } else {
-    comprar(maoOp, 1);
-    document.getElementById('msg').innerText = 'Robô comprou. Sua vez!';
-  }
-  minhaVez = true;
-  atualizar();
+omprar(maoOp, 1);
+document.getElementById('msg').innerText = 'Robô comprou. Sua vez!';
 }
-
+minhaVez = true;
 atualizar();
-</script>
-</body>
-</html>
+}
+// Verifica se entrou pelo link de convite (?sala=XXXX) ou inicia sala própria
+const params = new URLSearchParams(window.location.search);
+const salaConvite = params.get('sala');
+if (salaConvite) {
+entrarSala(salaConvite);
+} else {
+escutarSala(meuId);
+}
+atualizar();
